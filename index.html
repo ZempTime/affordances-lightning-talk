@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Affordances: Finding the Hidden Interfaces in Your Models</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/dist/theme/black.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/highlight/monokai.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .reveal pre {
+      width: 100%;
+      margin: 0;
+    }
+    .reveal pre code {
+      max-height: none;
+      padding: 1rem;
+    }
+    .reveal h1, .reveal h2, .reveal h3 {
+      text-transform: none;
+    }
+    .reveal ul, .reveal ol {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <!-- Slide 1: Title + Attribution -->
+      <section data-background-color="#1e293b">
+        <h1 class="text-6xl font-bold text-slate-100 mb-8">Affordances</h1>
+        <h2 class="text-4xl text-slate-300 mb-12">Finding the Hidden Interfaces in Your Models</h2>
+        <div class="text-xl text-slate-400 space-y-4">
+          <p>Pattern credit: <a href="https://github.com/avit" class="text-blue-400">Andrew Vit (@avit)</a></p>
+          <p class="mt-8">Chris Zempel</p>
+        </div>
+
+        <aside class="notes">
+          <p><strong>Introduction (30 seconds):</strong></p>
+          <ul>
+            <li>Welcome everyone - this is a 5-minute lightning talk on a powerful Rails pattern</li>
+            <li>You probably know concerns and service objects well</li>
+            <li>Affordances fill the gap between them - revealing focused interfaces hidden in your models</li>
+            <li>Pattern credit goes to Andrew Vit - this comes from real-world Rails development</li>
+            <li>Let's dive in by looking at a familiar problem</li>
+          </ul>
+        </aside>
+      </section>
+
+      <!-- Slide 2: The Mess - Fat Model -->
+      <section data-background-color="#0f172a">
+        <h2 class="text-4xl font-bold text-slate-100 mb-6">The Familiar Problem</h2>
+        <pre><code class="language-ruby text-base" data-trim data-line-numbers="1-6|8-12|14-17">
+class Article < ApplicationRecord
+  has_many :revisions
+  has_many :publication_events
+  has_many :editorial_assignments
+
+  # 🚩 Publication lifecycle (repetitive prefix)
+  def publication_draft?
+  def publication_scheduled?
+  def publication_publish!(published_at)
+  def publication_archive!
+  def publication_unarchive!
+
+  # 🚩 Editorial workflow (multi-association)
+  def assign_editor!(user, role:)
+    editorial_assignments.create!(...)
+    publication_events.create!(...)
+  end
+
+  # ... 50 more methods ...
+end
+        </code></pre>
+
+        <aside class="notes">
+          <p><strong>The Fat Model Problem (45 seconds):</strong></p>
+          <ul>
+            <li>This is a standard Rails model - everything goes in Article</li>
+            <li>First highlight: Notice all these methods starting with "publication_"? That's a code smell</li>
+            <li>Second highlight: Editorial workflow touches multiple associations at once</li>
+            <li>Third highlight: 67 methods total in this model - it's getting hard to navigate</li>
+            <li>The relationships between these methods are buried - you can't see at a glance which methods work together</li>
+            <li>Transition: Let's look at why this hurts</li>
+          </ul>
+        </aside>
+      </section>
+
+      <!-- Slide 3: Pain Points Diagram -->
+      <section data-background-color="#1e293b">
+        <h2 class="text-4xl font-bold text-slate-100 mb-6">What's the Pain?</h2>
+        <div class="text-xl text-left space-y-6">
+          <div class="fragment">
+            <p class="text-2xl text-red-300 mb-2">❌ Hard to discover related methods</p>
+            <p class="text-lg text-slate-400 ml-8">Which methods work together? Can't tell at a glance</p>
+          </div>
+          <div class="fragment">
+            <p class="text-2xl text-red-300 mb-2">❌ Can't pass around focused capability</p>
+            <p class="text-lg text-slate-400 ml-8">Want to give a service just publication behavior? You have to pass the whole Article</p>
+          </div>
+          <div class="fragment">
+            <p class="text-2xl text-red-300 mb-2">❌ Mixing concerns</p>
+            <p class="text-lg text-slate-400 ml-8">Core Article logic mixed with lifecycle, workflow, versioning...</p>
+          </div>
+          <div class="fragment">
+            <p class="text-2xl text-red-300 mb-2">❌ Testing complexity</p>
+            <p class="text-lg text-slate-400 ml-8">Every test requires full Article setup even when you only care about one aspect</p>
+          </div>
+        </div>
+
+        <aside class="notes">
+          <p><strong>Pain Points (45 seconds):</strong></p>
+          <ul>
+            <li>Fragment 1: Discoverability - you can't see which methods are related without reading through all 67</li>
+            <li>Fragment 2: Composability - you can't pass around just "publication" behavior, you have to pass the whole Article object</li>
+            <li>Fragment 3: This isn't a trait we're adding - it's an aspect we're revealing. The logic doesn't fit the "has a trait" pattern</li>
+            <li>Fragment 4: Testing gets harder because you need the full Article even when you're just testing publication logic</li>
+            <li>Pause after all fragments: So how do we fix this?</li>
+          </ul>
+        </aside>
+      </section>
+
+      <!-- Slide 4: Pattern Recognition -->
+      <section data-background-color="#0f172a">
+        <h2 class="text-4xl font-bold text-slate-100 mb-8">Spotting Affordances</h2>
+        <div class="text-xl space-y-8">
+          <div class="fragment">
+            <p class="text-2xl text-yellow-300 mb-3">🔍 Trigger #1: Repetitive Prefixes</p>
+            <div class="bg-slate-800 p-4 rounded text-base">
+              <code>publication_draft?, publication_publish!, publication_archive!</code>
+              <br/>
+              <span class="text-green-300">→ Extract: <code>article.publication</code></span>
+            </div>
+          </div>
+          <div class="fragment">
+            <p class="text-2xl text-yellow-300 mb-3">🔍 Trigger #2: Multi-Association Coordination</p>
+            <div class="bg-slate-800 p-4 rounded text-base">
+              <code>assign_editor!</code> <span class="text-slate-500">(touches 3 associations)</span>
+              <br/>
+              <span class="text-green-300">→ Extract: <code>article.editorial</code></span>
+            </div>
+          </div>
+          <div class="fragment">
+            <p class="text-2xl text-yellow-300 mb-3">🔍 Trigger #3: Unclear Relationships</p>
+            <div class="bg-slate-800 p-4 rounded text-base">
+              <code>create_revision_from_current!, restore_revision!</code>
+              <br/>
+              <span class="text-green-300">→ Extract: <code>article.versioning</code></span>
+            </div>
+          </div>
+        </div>
+        <p class="text-xl text-slate-300 mt-8 fragment">💡 The prefix IS the noun you're looking for</p>
+
+        <aside class="notes">
+          <p><strong>Pattern Recognition (60 seconds):</strong></p>
+          <ul>
+            <li>Fragment 1: First trigger is repetitive prefixes - "publication_" appears on 5+ methods. The prefix tells you the concept name!</li>
+            <li>Fragment 2: Second trigger is multi-association coordination - when one method touches multiple associations, that's a coordinating affordance</li>
+            <li>Fragment 3: Third trigger is unclear relationships - methods that feel related but the connection isn't obvious</li>
+            <li>Final fragment: Key insight - the prefix IS the noun. "publication_" methods become article.publication</li>
+            <li>Emphasize: We're revealing what Article already affords you - the publication aspect was always there</li>
+            <li>Transition: Let's see what this looks like in code</li>
+          </ul>
+        </aside>
+      </section>
+
+      <!-- Slide 5: The Transformation -->
+      <section data-background-color="#1e293b">
+        <h2 class="text-4xl font-bold text-slate-100 mb-6">The Transformation</h2>
+        <div class="grid grid-cols-2 gap-8">
+          <div>
+            <h3 class="text-2xl text-red-300 mb-4">❌ Before</h3>
+            <pre><code class="language-ruby text-base" data-trim>
+class Article
+  def publication_publish!(at)
+    update!(
+      published_at: at,
+      state: 'published'
+    )
+    publication_events.create!(...)
+  end
+end
+
+article.publication_publish!(
+  Time.current
+)
+            </code></pre>
+          </div>
+          <div class="fragment">
+            <h3 class="text-2xl text-green-300 mb-4">✅ After</h3>
+            <pre><code class="language-ruby text-base" data-trim>
+class Article
+  def publication
+    @publication ||=
+      ArticlePublication.new(self)
+  end
+end
+
+class ArticlePublication # PORO
+  def initialize(article)
+    @article = article
+  end
+
+  def publish!(at = Time.current)
+    @article.update!(...)
+  end
+end
+
+article.publication.publish!
+            </code></pre>
+          </div>
+        </div>
+
+        <aside class="notes">
+          <p><strong>The Transformation (90 seconds - first part):</strong></p>
+          <ul>
+            <li>Left side: Before - we have publication_publish! as a method directly on Article</li>
+            <li>Notice the repetitive prefix and the unclear API</li>
+            <li>Right side fragment: After - we extract ArticlePublication as a PORO (Plain Old Ruby Object)</li>
+            <li>Key points: Article provides an entry point via the "publication" method</li>
+            <li>ArticlePublication is NOT an ActiveRecord model - it's a wrapper around Article</li>
+            <li>Usage becomes crystal clear: article.publication.publish! - you can read the concept</li>
+            <li>Don't advance yet - next slide shows the critical constraint</li>
+          </ul>
+        </aside>
+      </section>
+
+      <!-- Slide 5b: Critical Constraint -->
+      <section data-background-color="#0f172a">
+        <h2 class="text-4xl font-bold text-slate-100 mb-6">⚠️ The Critical Rule</h2>
+        <div class="bg-red-900 p-6 rounded-lg mb-8">
+          <p class="text-3xl font-bold text-red-100 mb-4">Parent is the ONLY dependency</p>
+        </div>
+        <div class="text-xl space-y-6 text-left">
+          <div>
+            <p class="text-green-300 text-2xl mb-2">✅ Correct</p>
+            <pre><code class="language-ruby text-base" data-trim>
+ArticlePublication.new(article)
+article.publication.publish!(at: Time.current) # params in methods
+            </code></pre>
+          </div>
+          <div class="fragment">
+            <p class="text-red-300 text-2xl mb-2">❌ Wrong - Multiple Dependencies</p>
+            <pre><code class="language-ruby text-base" data-trim>
+ArticlePublication.new(article, user)  # Two dependencies
+ArticlePublication.new(article, as_of: date)  # Extra context
+            </code></pre>
+          </div>
+          <div class="fragment">
+            <p class="text-blue-300 text-xl mt-4">If you need other args → Extract a MORE GRANULAR affordance</p>
+          </div>
+        </div>
+
+        <aside class="notes">
+          <p><strong>Critical Constraint (continued from previous - 90 seconds total):</strong></p>
+          <ul>
+            <li>This is THE defining rule of affordances: parent is the ONLY dependency</li>
+            <li>Top example shows correct usage - ArticlePublication takes only article</li>
+            <li>Runtime parameters like "at" go to the methods, not the initializer</li>
+            <li>Fragment 1: Wrong examples - if you need user, date, or any other dependency, this is NOT the right affordance level</li>
+            <li>Fragment 2: Solution - extract a more granular affordance that takes both dependencies</li>
+            <li>This rule keeps affordances focused and composable</li>
+            <li>Transition: Let me show you what "more granular" means</li>
+          </ul>
+        </aside>
+      </section>
+
+      <!-- Slide 6: Granular Affordances -->
+      <section data-background-color="#1e293b">
+        <h2 class="text-4xl font-bold text-slate-100 mb-6">Granular Affordances</h2>
+        <div class="text-base space-y-4">
+          <div>
+            <p class="text-xl text-slate-300 mb-3">When you need multiple dependencies, chain affordances:</p>
+            <pre><code class="language-ruby text-base" data-trim>
+class Article
+  def publication
+    ArticlePublication.new(self)  # Only article
+  end
+end
+
+class ArticlePublication
+  def initialize(article)
+    @article = article
+  end
+
+  def as_editor(user)  # Returns MORE GRANULAR affordance
+    ArticlePublicationAsEditor.new(@article, user)
+  end
+end
+
+class ArticlePublicationAsEditor
+  def initialize(article, user)  # NOW both are needed
+    @article = article
+    @user = user
+  end
+
+  def can_publish?
+    # User-specific publication logic
+  end
+end
+            </code></pre>
+          </div>
+          <div class="fragment">
+            <p class="text-2xl text-green-300 mt-4">Usage shows the granularity:</p>
+            <pre><code class="language-ruby text-base" data-trim>
+article.publication.as_editor(current_user).can_publish?
+        └─ affordance  └─ more granular affordance
+            </code></pre>
+          </div>
+        </div>
+
+        <aside class="notes">
+          <p><strong>Granular Affordances (30 seconds):</strong></p>
+          <ul>
+            <li>When you need user context, don't break the rule - extract a more specific affordance</li>
+            <li>ArticlePublication still takes only article</li>
+            <li>But it provides as_editor method that returns ArticlePublicationAsEditor</li>
+            <li>That more granular affordance takes BOTH article and user because both are needed for that specific concept</li>
+            <li>Fragment: Usage reads beautifully - article.publication.as_editor(user).can_publish?</li>
+            <li>You're chaining affordances to add context, not breaking the single-dependency rule</li>
+            <li>Transition: So when do you use this versus other patterns?</li>
+          </ul>
+        </aside>
+      </section>
+
+      <!-- Slide 7: Anti-Pattern - Single-Method Services -->
+      <section data-background-color="#0f172a">
+        <h2 class="text-4xl font-bold text-slate-100 mb-6">⚠️ Anti-Pattern Alert</h2>
+        <div class="grid grid-cols-2 gap-8">
+          <div>
+            <h3 class="text-2xl text-red-300 mb-4">❌ Single-Method Service Objects</h3>
+            <pre><code class="language-ruby text-base" data-trim>
+# Ends up with lots of
+# single-method boilerplate files
+
+ThingDoer.new.do_thing
+
+ArticlePublisher.new.publish
+ArticleArchiver.new.archive
+ArticleScheduler.new.schedule
+ArticleUnpublisher.new.unpublish
+
+# Each in its own file
+# Hard to discover related operations
+            </code></pre>
+          </div>
+          <div class="fragment">
+            <h3 class="text-2xl text-green-300 mb-4">✅ Affordance: Group Related Ops</h3>
+            <pre><code class="language-ruby text-base" data-trim>
+# Related methods grouped by concept
+# All discoverable in one place
+
+article.publication.publish!
+article.publication.archive!
+article.publication.schedule!(at)
+article.publication.unpublish!
+
+# Plus queries:
+article.publication.draft?
+article.publication.scheduled?
+            </code></pre>
+          </div>
+        </div>
+        <p class="text-xl text-slate-300 mt-6 fragment">💡 If your service objects cluster around one concept, consider an affordance</p>
+
+        <aside class="notes">
+          <p><strong>Anti-Pattern Warning (30 seconds):</strong></p>
+          <ul>
+            <li>Left side: Common anti-pattern - single-method service objects</li>
+            <li>You end up with ThingDoer.do_thing, PublicationPublisher.publish, etc.</li>
+            <li>Each lives in its own file, hard to discover what operations are available</li>
+            <li>Fragment 1: Instead, group these related operations into an affordance</li>
+            <li>All publication operations live together under article.publication</li>
+            <li>Bonus: You can mix commands (publish!, archive!) with queries (draft?, scheduled?)</li>
+            <li>Fragment 2: Key insight - if your service objects cluster around one concept, that's an affordance waiting to be extracted</li>
+            <li>Transition: So when do you use each pattern?</li>
+          </ul>
+        </aside>
+      </section>
+
+      <!-- Slide 8: Decision Questions -->
+      <section data-background-color="#1e293b">
+        <h2 class="text-4xl font-bold text-slate-100 mb-6">How to Decide?</h2>
+        <p class="text-2xl text-yellow-300 mb-6">⭐ North Star: Call-Site Clarity</p>
+        <div class="text-lg space-y-4 text-left">
+          <div class="fragment">
+            <p class="text-xl text-blue-300 font-semibold">1. "Would someone understand from the call site?"</p>
+            <div class="text-base ml-6 mt-2 space-y-1">
+              <p class="text-green-300"><code>article.publication.publish!</code> → Self-evident ✅</p>
+              <p class="text-red-300"><code>article.lifecycle_renew!</code> → Prefix smell 🚩</p>
+              <p class="text-blue-200"><code>include Searchable</code> → Clear trait</p>
+            </div>
+            <p class="text-slate-400 ml-6 mt-2 italic">Use the clearest option. Don't force a pattern.</p>
+          </div>
+          <div class="fragment">
+            <p class="text-xl text-blue-300 font-semibold">2. "Do I call this, or does Rails call it?"</p>
+            <p class="text-slate-400 ml-6">Explicit calls → Affordance • Implicit (callbacks) → Concern</p>
+          </div>
+          <div class="fragment">
+            <p class="text-xl text-blue-300 font-semibold">3. "Can I pass this piece around?"</p>
+            <p class="text-slate-400 ml-6">Yes → Affordance • No → Probably concern</p>
+          </div>
+          <div class="fragment">
+            <p class="text-xl text-blue-300 font-semibold">4. "Do 3+ method names cluster around a noun?"</p>
+            <p class="text-slate-400 ml-6">Yes → Extract that noun as affordance (prefix = noun)</p>
+          </div>
+          <div class="fragment">
+            <p class="text-xl text-blue-300 font-semibold">5. "Need infrastructure AND operations?"</p>
+            <p class="text-slate-400 ml-6">Yes → Concern + Affordance • Just callbacks → Concern only</p>
+            <p class="text-slate-400 ml-6">Just operations → Affordance only</p>
+          </div>
+        </div>
+
+        <aside class="notes">
+          <p><strong>Decision Questions (60 seconds):</strong></p>
+          <ul>
+            <li>Call-Site Clarity is your North Star - always start here</li>
+            <li>Fragment 1: First question - would someone understand what this does just from reading the call site? This is THE most important question. article.publication.publish! is self-evident. article.lifecycle_renew! has prefix smell. Use the clearest option - don't force a pattern!</li>
+            <li>Fragment 2: Do you explicitly call this method, or does Rails call it automatically? Explicit calls suggest affordance, callbacks/validations suggest concern</li>
+            <li>Fragment 3: Can you pass this piece to another method meaningfully? notify_subscribers(article.publication) makes sense. Concerns can't be passed around</li>
+            <li>Fragment 4: Do 3+ method names cluster around a noun? lifecycle_renew, lifecycle_cancel - "lifecycle" is the affordance. Prefix IS the noun</li>
+            <li>Fragment 5: Need both infrastructure AND explicit operations? Concern provides has_many and callbacks, affordance provides the API. Or just one or the other</li>
+            <li>These questions give you a systematic framework for making the choice</li>
+            <li>Transition: Now let's see the patterns side by side</li>
+          </ul>
+        </aside>
+      </section>
+
+      <!-- Slide 9: Decision Framework -->
+      <section data-background-color="#0f172a">
+        <h2 class="text-4xl font-bold text-slate-100 mb-6">When to Use What?</h2>
+        <table class="text-base w-full">
+          <thead>
+            <tr class="text-left">
+              <th class="text-xl text-slate-300 pb-4">Pattern</th>
+              <th class="text-xl text-slate-300 pb-4">Use When</th>
+              <th class="text-xl text-slate-300 pb-4">Example</th>
+            </tr>
+          </thead>
+          <tbody class="text-slate-200">
+            <tr class="fragment">
+              <td class="text-lg font-semibold text-blue-300 pr-4 pb-3">Concern</td>
+              <td class="pr-4 pb-3">Implicit behavior only<br/><span class="text-sm text-slate-400">(callbacks, validations)</span></td>
+              <td class="pb-3"><code>Searchable (after_save)</code></td>
+            </tr>
+            <tr class="fragment">
+              <td class="text-lg font-semibold text-purple-300 pr-4 pb-3">Service</td>
+              <td class="pr-4 pb-3">Single complex workflow</td>
+              <td class="pb-3"><code>ArticlePublisher.publish</code></td>
+            </tr>
+            <tr class="fragment">
+              <td class="text-lg font-semibold text-yellow-300 pr-4 pb-3">Assoc Ext</td>
+              <td class="pr-4 pb-3">Extending one association</td>
+              <td class="pb-3"><code>article.revisions.recent</code></td>
+            </tr>
+            <tr class="fragment">
+              <td class="text-lg font-semibold text-green-300 pr-4 pb-3">Affordance</td>
+              <td class="pr-4 pb-3">Explicit behavior grouped by concept<br/><span class="text-sm text-slate-400">Parent is ONLY dependency</span></td>
+              <td class="pb-3"><code>article.publication.publish!</code></td>
+            </tr>
+            <tr class="fragment">
+              <td class="text-lg font-semibold text-cyan-300 pr-4 pb-3">Concern + Affordance</td>
+              <td class="pr-4 pb-3">Infrastructure AND operations<br/><span class="text-sm text-slate-400">Concern sets up, affordance provides API</span></td>
+              <td class="pb-3"><code>UsageCredits (has_many + .usage_credits)</code></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="mt-8 fragment">
+          <p class="text-2xl text-slate-200">💡 Concerns: implicit behavior, Affordances: explicit behavior</p>
+          <p class="text-xl text-slate-400 mt-3">When you see repetitive prefixes → think affordance</p>
+        </div>
+
+        <aside class="notes">
+          <p><strong>Decision Framework (60 seconds):</strong></p>
+          <ul>
+            <li>You have FIVE tools in your toolkit - let's see when to use each</li>
+            <li>Fragment 1: Concerns for implicit behavior ONLY - Searchable with after_save callbacks that run automatically</li>
+            <li>Fragment 2: Service objects for single complex workflows - you call them once for a complex operation</li>
+            <li>Fragment 3: Association extensions for extending a single association's collection methods</li>
+            <li>Fragment 4: Affordances organize explicit behavior - multiple operations you call directly, grouped by concept. Parent is the ONLY dependency</li>
+            <li>Fragment 5: NEW - Concern + Affordance combined! Concern provides infrastructure (has_many, callbacks), affordance provides the API</li>
+            <li>Final fragment: Key distinction - concerns for implicit behavior (callbacks only), affordances for explicit behavior (methods you call)</li>
+            <li>When you see repetitive prefixes like publication_, that's your signal to extract an affordance</li>
+            <li>Transition: Let's wrap up</li>
+          </ul>
+        </aside>
+      </section>
+
+      <!-- Slide 10: Closing Summary -->
+      <section data-background-color="#1e293b">
+        <h2 class="text-5xl font-bold text-slate-100 mb-8">Affordances in Practice</h2>
+        <div class="text-xl space-y-6 text-left">
+          <div class="flex items-start space-x-4">
+            <span class="text-3xl">🔍</span>
+            <div>
+              <p class="font-semibold text-slate-200">Spot:</p>
+              <p class="text-slate-400">Repetitive prefixes, multi-association coordination</p>
+            </div>
+          </div>
+          <div class="flex items-start space-x-4">
+            <span class="text-3xl">🎯</span>
+            <div>
+              <p class="font-semibold text-slate-200">Extract:</p>
+              <p class="text-slate-400">PORO wrapper with parent as ONLY dependency</p>
+            </div>
+          </div>
+          <div class="flex items-start space-x-4">
+            <span class="text-3xl">⚠️</span>
+            <div>
+              <p class="font-semibold text-slate-200">Rule:</p>
+              <p class="text-slate-400">Need other args? Extract more granular affordance</p>
+            </div>
+          </div>
+          <div class="flex items-start space-x-4">
+            <span class="text-3xl">🧰</span>
+            <div>
+              <p class="font-semibold text-slate-200">Choose:</p>
+              <p class="text-slate-400">Right tool for the job (concerns/services/affordances)</p>
+            </div>
+          </div>
+        </div>
+        <div class="mt-12 text-lg text-slate-400">
+          <p>Pattern credit: <a href="https://github.com/avit" class="text-blue-400">Andrew Vit (@avit)</a></p>
+          <p class="mt-6 text-2xl text-slate-200">Questions?</p>
+        </div>
+
+        <aside class="notes">
+          <p><strong>Closing Summary (10 seconds):</strong></p>
+          <ul>
+            <li>Quick recap: Spot affordances by looking for repetitive prefixes or multi-association coordination</li>
+            <li>Extract them as POROs with parent as the only dependency</li>
+            <li>Remember the rule - if you need other args, extract a more granular affordance</li>
+            <li>Use the right tool - concerns for traits, affordances for aspects</li>
+            <li>Credit to Andrew Vit for this pattern</li>
+            <li>Open for questions</li>
+          </ul>
+          <p><strong>Anticipated Questions:</strong></p>
+          <ul>
+            <li>Q: "When would I use this instead of a concern?" A: Concerns are for implicit behavior ONLY - callbacks and validations that Rails calls automatically (like Searchable with after_save). Affordances organize explicit behavior you call directly. Sometimes you need both - concern provides infrastructure, affordance provides API.</li>
+            <li>Q: "Isn't this just a service object?" A: Services are single-purpose workflows. Affordances are reusable interfaces with multiple related operations. If you have multiple single-method services around one concept (ArticlePublisher, ArticleArchiver), that's an affordance waiting to be extracted.</li>
+            <li>Q: "What about performance?" A: Memoization means one object per parent instance - negligible overhead.</li>
+            <li>Q: "Can I use concerns AND affordances together?" A: Absolutely! Concern sets up has_many associations and callbacks, then provides an affordance method for explicit operations. UsageCredits is a great example.</li>
+          </ul>
+        </aside>
+      </section>
+
+      <!-- Slide 11: Bonus - Unified API Surfaces -->
+      <section data-background-color="#0f172a">
+        <h2 class="text-4xl font-bold text-slate-100 mb-6">🎁 Bonus: Unified API Surfaces</h2>
+        <p class="text-2xl text-slate-300 mb-8">Same concept, different levels, same interface</p>
+
+        <div class="grid grid-cols-2 gap-8">
+          <div>
+            <h3 class="text-xl text-blue-300 mb-4">Part Level</h3>
+            <pre><code class="language-ruby text-base" data-trim>
+# Transaction-level ledger
+transaction.ledger.balance
+transaction.ledger.entries
+transaction.ledger.reconcile!
+
+# Different implementation:
+# Queries own entries directly
+            </code></pre>
+          </div>
+          <div class="fragment">
+            <h3 class="text-xl text-green-300 mb-4">Whole Level</h3>
+            <pre><code class="language-ruby text-base" data-trim>
+# Account-level ledger
+account.ledger.balance
+account.ledger.entries
+account.ledger.reconcile!
+
+# Different implementation:
+# Aggregates across transactions
+            </code></pre>
+          </div>
+        </div>
+
+        <div class="mt-8 fragment">
+          <p class="text-xl text-slate-300 mb-4">💡 Same affordance interface, different implementations</p>
+          <div class="bg-slate-800 p-4 rounded text-base">
+            <code class="text-slate-200">
+              # Polymorphic usage - works at any level<br/>
+              def show_ledger_summary(ledgerable)<br/>
+              &nbsp;&nbsp;ledgerable.ledger.balance<br/>
+              &nbsp;&nbsp;ledgerable.ledger.entries.last(10)<br/>
+              end<br/>
+              <br/>
+              show_ledger_summary(transaction) # Works!<br/>
+              show_ledger_summary(account)     # Works!
+            </code>
+          </div>
+        </div>
+
+        <aside class="notes">
+          <p><strong>Bonus Pattern - Unified API Surfaces (30 seconds):</strong></p>
+          <ul>
+            <li>Here's a really cool advanced pattern - providing the same affordance API at different conceptual levels</li>
+            <li>Left side: Transaction has a ledger affordance - queries its own entries directly</li>
+            <li>Fragment 1: Account also has a ledger affordance - but aggregates across all its transactions</li>
+            <li>Same interface (balance, entries, reconcile!), completely different implementations</li>
+            <li>Fragment 2: The power - you can write polymorphic code that works at any level</li>
+            <li>This is particularly useful for part/whole relationships - transactions roll up into accounts, line items into invoices, etc.</li>
+            <li>Different traversal and aggregation logic, but unified concept and API surface</li>
+            <li>This makes your code incredibly flexible and composable</li>
+          </ul>
+        </aside>
+      </section>
+
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/dist/reveal.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/notes/notes.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/markdown/markdown.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.0.4/plugin/highlight/highlight.js"></script>
+  <script>
+    Reveal.initialize({
+      slideNumber: 'c/t',
+      hash: true,
+      width: '100%',
+      height: '100%',
+      transition: 'slide',
+      controls: true,
+      progress: true,
+      keyboard: true,
+      overview: true,
+      plugins: [ RevealMarkdown, RevealHighlight, RevealNotes ]
+    });
+  </script>
+</body>
+</html>
