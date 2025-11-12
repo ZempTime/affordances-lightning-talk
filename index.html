@@ -43,9 +43,9 @@
           <ul>
             <li>Welcome everyone - this is a 5-minute lightning talk on a powerful Rails pattern</li>
             <li>You probably know concerns and service objects well</li>
-            <li>Affordances fill the gap between them - revealing focused interfaces hidden in your models</li>
+            <li>Affordances are a new name for an existing way of organizing your code that focuses on revealing focused interfaces hidden in your models</li>
             <li>Pattern credit goes to Andrew Vit - this comes from real-world Rails development</li>
-            <li>Let's dive in by looking at a familiar problem</li>
+            <li>So what's an affordance?</li>
           </ul>
         </aside>
       </section>
@@ -70,7 +70,7 @@
             <div class="bg-slate-800 p-4 rounded mt-3 text-base">
               <p class="text-slate-400">An Article doesn't just store data—it <span class="text-green-300">affords</span>:</p>
               <p class="mt-2 ml-4">• <code>article.publication</code> — publication operations</p>
-              <p class="ml-4">• <code>article.revision</code> — revision management</p>
+              <p class="ml-4">• <code>article.revisioning</code> — revision management</p>
               <p class="ml-4">• <code>article.workflow</code> — workflow coordination</p>
             </div>
           </div>
@@ -82,13 +82,12 @@
         <aside class="notes">
           <p><strong>What is an Affordance? (45 seconds):</strong></p>
           <ul>
-            <li>Fragment 1: The term comes from psychology and design - coined by James Gibson in 1966, popularized by Donald Norman in 1988</li>
+            <li>Fragment 1: The term comes from psychology and design. It's been more recently popularized by the design of everday things, and ryan singer from basecamp</li>
             <li>An affordance is the actionable possibilities an object provides - what you can DO with it</li>
             <li>A chair affords sitting, a door handle affords pulling, a button affords pressing</li>
             <li>Fragment 2: In code, same concept - what actionable possibilities does your model provide?</li>
             <li>An Article doesn't just hold data - it affords publication operations, revision management, workflow coordination</li>
             <li>Fragment 3: Key insight - we're not adding new behavior, we're REVEALING what was always there</li>
-            <li>The publication aspect already existed in those publication_ methods - we're just making it explicit and discoverable</li>
             <li>Transition: Let's look at a familiar problem that shows why we need this pattern</li>
           </ul>
         </aside>
@@ -162,7 +161,7 @@ end
           <ul>
             <li>Fragment 1: Discoverability - you can't see which methods are related without reading through all 67</li>
             <li>Fragment 2: Composability - you can't pass around just "publication" behavior, you have to pass the whole Article object</li>
-            <li>Fragment 3: Mixing concerns - hard to see dependencies between methods when ALL attributes and methods are in scope. Core Article logic (title, body) mixed with publication lifecycle, workflow coordination, versioning - everything can touch everything</li>
+            <li>Fragment 3: Mixing concerns - hard to see dependencies between methods when ALL attributes and methods are in scope.</li>
             <li>Fragment 4: Testing gets harder because you need the full Article even when you're just testing publication logic</li>
             <li>Pause after all fragments: So how do we fix this?</li>
           </ul>
@@ -178,7 +177,7 @@ end
             <div class="bg-slate-800 p-4 rounded text-base">
               <code>revision_create_from_current!, revision_restore!, revision_compare!</code>
               <br/>
-              <span class="text-green-300">→ Extract: <code>article.revision</code></span>
+              <span class="text-green-300">→ Extract: <code>article.revisioning</code></span>
             </div>
           </div>
           <div class="fragment">
@@ -198,16 +197,17 @@ end
             </div>
           </div>
         </div>
-        <p class="text-xl text-slate-300 mt-8 fragment">💡 Sometimes the prefix IS the noun you're looking for</p>
+        <p class="text-xl text-slate-300 mt-8 fragment">💡 When you find the right name, everything clicks into place</p>
 
         <aside class="notes">
           <p><strong>Pattern Recognition (60 seconds):</strong></p>
           <ul>
             <li>Fragment 1: First trigger is repetitive prefixes - "revision_" appears on 5+ methods. The prefix is unnatural - you wouldn't normally prefix everything with "revision_"</li>
-            <li>Fragment 2: Second trigger is multi-association coordination - when one method like assign_approver! touches multiple associations (workflow_assignments AND publication_events), that's a coordinating affordance</li>
+            <li>And just a note on this one. Although this might look obvious When presented like this on the slide, in practice, this ends up being kind of subtle. This creeps up over time. And you'll know that you found the right name for a thing when renaming allows you to shorten method names, shorten class names, and generally delete things.</li>
+            <li>Fragment 2: Second trigger is multi-association coordination - when one method like assign_approver! touches multiple associations, that's a coordinating affordance</li>
             <li>Fragment 3: Third trigger is unclear relationships - look at draft?, publish!, archive!, scheduled? Without a prefix or context, you can't tell these are related to publication! That hidden relationship is the affordance waiting to be revealed</li>
-            <li>Final fragment: Key insight - SOMETIMES the prefix IS the noun (revision_ → article.revision). Other times, the missing context IS the noun (draft/publish/archive → article.publication)</li>
-            <li>Emphasize: We're revealing what Article already affords you - these aspects were always there, just hidden</li>
+            <li>Final fragment: Key insight - SOMETIMES the prefix becomes the affordance (revision_ → article.revisioning). We use "revisioning" not "revision" to avoid confusion with the revisions association. Other times, the missing context IS the noun (draft/publish/archive → article.publication)</li>
+            <li>Emphasize: But when you find the right affordance, things click into place. these aspects were always there, just hidden</li>
             <li>Transition: Let's see what this looks like in code</li>
           </ul>
         </aside>
@@ -230,16 +230,16 @@ article.revision_list_changes
           <div class="fragment">
             <h3 class="text-2xl text-green-300 mb-4">✅ After</h3>
             <pre><code class="language-ruby text-base" data-trim>
-article.revision.create_from_current!
-article.revision.restore!(rev)
-article.revision.compare(a, b)
-article.revision.list_changes
+article.revisioning.create_from_current!
+article.revisioning.restore!(rev)
+article.revisioning.compare(a, b)
+article.revisioning.list_changes
             </code></pre>
             <p class="text-lg text-green-300 mt-4">Clean interface grouped by concept</p>
           </div>
         </div>
         <div class="mt-8 fragment">
-          <p class="text-2xl text-slate-200">💡 Focus on: <code class="text-blue-300">revision.create_from_current!</code></p>
+          <p class="text-2xl text-slate-200">💡 Focus on: <code class="text-blue-300">revisioning.create_from_current!</code></p>
           <p class="text-lg text-slate-400 mt-2">Prefix becomes the noun - clean, discoverable</p>
         </div>
 
@@ -247,9 +247,10 @@ article.revision.list_changes
           <p><strong>The Goal (30 seconds):</strong></p>
           <ul>
             <li>Left side: Before - notice how "revision_" repeats on every single call? That's visual noise and a code smell</li>
-            <li>Fragment 1: After - now look at the right side. We extract the prefix as the affordance</li>
-            <li>What stands out? revision.create_from_current!, revision.restore!, revision.compare - all revision operations together</li>
-            <li>Fragment 2: The repetitive prefix becomes the noun - revision.create_from_current! is clean and discoverable</li>
+            <li>Fragment 1: After - now look at the right side. We extract the prefix as the affordance, but call it "revisioning"</li>
+            <li>What stands out? revisioning.create_from_current!, revisioning.restore!, revisioning.compare - all revision operations together</li>
+            <li>Fragment 2: The repetitive prefix becomes the affordance noun - revisioning.create_from_current! is clean and discoverable</li>
+            <li>Note: We use "revisioning" not "revision" to avoid confusion with the revisions association - Article has_many :revisions</li>
             <li>This is what we're aiming for - turn that prefix smell into a focused interface</li>
             <li>Next slide shows HOW to implement this transformation</li>
           </ul>
@@ -279,12 +280,12 @@ article.revision_create_from_current!
             <h3 class="text-2xl text-green-300 mb-4">✅ After</h3>
             <pre><code class="language-ruby text-base" data-trim>
 class Article
-  def revision
-    Article::Revision.new(self)
+  def revisioning
+    Article::Revisioning.new(self)
   end
 end
 
-class Article::Revision # PORO
+class Article::Revisioning # PORO
   def initialize(article)
     @article = article
   end
@@ -294,7 +295,7 @@ class Article::Revision # PORO
   end
 end
 
-article.revision.create_from_current!
+article.revisioning.create_from_current!
             </code></pre>
           </div>
         </div>
@@ -302,14 +303,14 @@ article.revision.create_from_current!
         <aside class="notes">
           <p><strong>How to Extract (45 seconds):</strong></p>
           <ul>
-            <li>Left side: Before - revision_create_from_current! is a method directly on Article with that ugly prefix</li>
-            <li>Right side fragment: After - we extract Article::Revision as a PORO (Plain Old Ruby Object)</li>
-            <li>Key implementation details: Article provides "revision" method that returns new instance</li>
-            <li>Note: No memoization shown here to keep it simple - you can add @revision ||= if needed</li>
-            <li>Article::Revision is namespaced under Article - keeps things organized</li>
-            <li>It's NOT an ActiveRecord model - just a wrapper that takes article as only dependency</li>
-            <li>Usage: article.revision.create_from_current! - the prefix becomes the noun, method becomes clean verb</li>
-            <li>This pattern works for any repetitive prefix you find</li>
+            <li>The transformation has three key parts: a gateway method on Article, a PORO wrapper class, and moving the logic</li>
+            <li>Fragment reveals: Article#revisioning is just a factory method - it returns a new wrapper instance each time</li>
+            <li>The wrapper - Article::Revisioning - is NOT a model. It's a plain Ruby object that takes article as its only dependency</li>
+            <li>Critical: We call it "revisioning" not "revision" to avoid confusion with the has_many :revisions association</li>
+            <li>The method name loses its prefix - revision_create_from_current! becomes just create_from_current!</li>
+            <li>Inside the wrapper, we access the revisions association via @article.revisions - that's where the actual association lives</li>
+            <li>No memoization shown to keep it simple, but you can add @revisioning ||= if you want to cache the instance</li>
+            <li>Emphasize: This is a mechanical refactoring - any repetitive prefix can become an affordance this way</li>
           </ul>
         </aside>
       </section>
@@ -498,16 +499,18 @@ article.publication.scheduled?
         </div>
 
         <aside class="notes">
-          <p><strong>Anti-Pattern Warning (35 seconds):</strong></p>
+          <p><strong>Anti-Pattern Warning (40 seconds):</strong></p>
           <ul>
-            <li>Left side: Common anti-pattern - single-method service objects</li>
-            <li>You end up with ThingDoer.do_thing, ArticlePublisher.publish, ArticleArchiver.archive, etc.</li>
-            <li>Each lives in its own file, hard to discover what operations are available</li>
-            <li>Fragment 1: Instead, group these related operations into an affordance</li>
-            <li>All publication operations live together under article.publication</li>
-            <li>Bonus: You can mix commands (publish!, archive!) with queries (draft?, scheduled?)</li>
-            <li>Fragment 2: Key insight - if your service objects cluster around one concept, that's an affordance</li>
-            <li>Fragment 3: Another smell - those service objects probably have repeated code! Validation, required query methods, shared setup. That duplication goes away when you extract to an affordance</li>
+            <li>Left side: This is the anti-pattern - CLUSTERS of SIMPLE single-method service objects</li>
+            <li>ArticlePublisher, ArticleArchiver, ArticleScheduler, ArticleUnpublisher - each is simple, each does one thing, each in its own file</li>
+            <li>The problem isn't complexity - these are all relatively straightforward operations</li>
+            <li>The problem is discoverability and organization - how do I know what publication operations exist? I have to grep for files or remember them all</li>
+            <li>Fragment 1: Structuring as an affordance solves this - all publication operations are now discoverable in one place</li>
+            <li>article.publication gives you a directory - you can see publish!, archive!, schedule!, unpublish!, plus queries like draft? and scheduled?</li>
+            <li>Fragment 2: Key signal - if your simple service objects cluster around one concept, that's an affordance waiting to be extracted</li>
+            <li>Fragment 3: Another smell - those service objects probably share validation, query methods, setup code. That duplication disappears with an affordance</li>
+            <li>IMPORTANT caveat: This isn't saying service objects are bad! If you have a complex multi-step workflow, a service object can totally make sense</li>
+            <li>This pattern applies to SIMPLE operations that cluster - not complex orchestration</li>
             <li>Transition: So when do you use each pattern?</li>
           </ul>
         </aside>
@@ -549,18 +552,20 @@ article.publication.scheduled?
         <aside class="notes">
           <p><strong>Decision Questions (60 seconds):</strong></p>
           <ul>
-            <li>Call-Site Clarity is your North Star - always start here</li>
-            <li>Fragment 1: First question - would someone understand what this does just from reading the call site? This is THE most important question</li>
-            <li>article.publication.publish! is self-evident - you know exactly what it does</li>
-            <li>article.renew! - renew what? Subscription? License? Context is missing</li>
-            <li>article.assign_editor!(user) - this works, but how do I discover what ELSE I can do? Is there unassign_editor? What other workflow methods exist? No directory to browse</li>
-            <li>Affordances solve BOTH problems - they provide context (article.subscription.renew!) AND discoverability (article.workflow has all the workflow methods in one place)</li>
-            <li>Fragment 2: Do you explicitly call this method, or does Rails call it automatically? Explicit calls suggest affordance, callbacks/validations suggest concern</li>
-            <li>Fragment 3: Can you pass this piece to another method meaningfully? notify_subscribers(article.publication) makes sense. Concerns can't be passed around</li>
-            <li>Fragment 4: Do 3+ method names cluster around a noun? That noun is your affordance waiting to be extracted</li>
-            <li>Fragment 5: Need both infrastructure AND explicit operations? Concern provides has_many and callbacks, affordance provides the API. Or just one or the other</li>
-            <li>These questions give you a systematic framework for making the choice</li>
-            <li>Transition: Now let's see the patterns side by side</li>
+            <li>Call-Site Clarity is your North Star - the code at the point of use should tell you what's happening without needing to look elsewhere</li>
+            <li>Fragment 1: This is THE most important question - readability at the call site trumps everything else</li>
+            <li>Affordances solve two problems simultaneously: missing context (what am I renewing?) and missing discoverability (what else can I do with this?)</li>
+            <li>The noun in the middle acts as both namespace and directory - it tells you what aspect you're working with AND groups related operations</li>
+            <li>Fragment 2: Explicit vs implicit is about who's in control - if YOU call it in your application code, it's a candidate for an affordance</li>
+            <li>If Rails or the framework calls it automatically (callbacks, validations), that's concern territory - you're hooking into lifecycle, not exposing API</li>
+            <li>Fragment 3: Composability question - can you hand this focused capability to another object?</li>
+            <li>Being able to pass around just the publication aspect, not the whole article, is powerful for building focused APIs and reducing coupling</li>
+            <li>Fragment 4: Clustering reveals hidden concepts in your domain - if 3+ methods share a prefix or theme, that's not coincidence, that's a concept trying to emerge</li>
+            <li>The repetitive prefix is your domain telling you it wants to be named and organized</li>
+            <li>Fragment 5: Sometimes you need both - concern sets up the infrastructure (associations, callbacks) and affordance provides the explicit API</li>
+            <li>They're not mutually exclusive - they solve different problems and can work together beautifully</li>
+            <li>These five questions give you a systematic way to choose the right tool for your specific situation</li>
+            <li>Transition: By thinking about structuring your code and affordances, I think one of the most valuable aspects is what else You also need to think about. This is one of the most valuable pieces of thinking and affordances. Let's drill in on this a little deeper.</li>
           </ul>
         </aside>
       </section>
@@ -644,10 +649,10 @@ article.publication.scheduled?
             </div>
           </div>
           <div class="flex items-start space-x-4">
-            <span class="text-3xl">⚠️</span>
+            <span class="text-3xl">🚩</span>
             <div>
-              <p class="font-semibold text-slate-200">Rule:</p>
-              <p class="text-slate-400">Need other args? Extract more granular affordance</p>
+              <p class="font-semibold text-slate-200">Smell:</p>
+              <p class="text-slate-400">Always need same parameter? Wrong level in hierarchy</p>
             </div>
           </div>
           <div class="flex items-start space-x-4">
@@ -668,8 +673,9 @@ article.publication.scheduled?
           <ul>
             <li>Quick recap: Spot affordances by looking for repetitive prefixes or multi-association coordination</li>
             <li>Extract them as POROs with parent as the only dependency</li>
-            <li>Remember the rule - if you need other args, extract a more granular affordance</li>
-            <li>Use the right tool - concerns for traits, affordances for aspects</li>
+            <li>Watch for the smell - if you consistently need to parameterize the same thing for any method to work, that's feedback you're at the wrong level in your relationship hierarchy</li>
+            <li>Move the affordance down to where that parameter becomes the parent</li>
+            <li>Use the right tool for the job - concerns, services, and affordances each have their place</li>
             <li>Credit to Andrew Vit for this pattern</li>
             <li>Open for questions</li>
           </ul>
@@ -734,14 +740,16 @@ account.ledger.reconcile!
         <aside class="notes">
           <p><strong>Bonus Pattern - Unified API Surfaces (30 seconds):</strong></p>
           <ul>
-            <li>Here's a really cool advanced pattern - providing the same affordance API at different conceptual levels</li>
-            <li>Left side: Transaction has a ledger affordance - queries its own entries directly</li>
-            <li>Fragment 1: Account also has a ledger affordance - but aggregates across all its transactions</li>
-            <li>Same interface (balance, entries, reconcile!), completely different implementations</li>
-            <li>Fragment 2: The power - you can write polymorphic code that works at any level</li>
-            <li>This is particularly useful for part/whole relationships - transactions roll up into accounts, line items into invoices, etc.</li>
-            <li>Different traversal and aggregation logic, but unified concept and API surface</li>
-            <li>This makes your code incredibly flexible and composable</li>
+            <li>Here's a cool advanced pattern - you can provide the same affordance interface at different levels of your hierarchy</li>
+            <li>Starting point: Transaction has a ledger affordance with balance, entries, and reconcile! methods</li>
+            <li>At this level, it queries its own entries directly - straightforward implementation</li>
+            <li>Fragment 1 reveals: Account ALSO has a ledger affordance with the exact same interface - balance, entries, reconcile!</li>
+            <li>But notice the implementation is different - Account aggregates across all its transactions, rolling them up</li>
+            <li>Same method names, same concept, completely different traversal and aggregation logic underneath</li>
+            <li>Fragment 2 shows the payoff: you can write polymorphic code that works at any level of your hierarchy</li>
+            <li>show_ledger_summary doesn't care if it gets a transaction or an account - both afford ledger operations</li>
+            <li>This is particularly powerful for part/whole relationships - transactions in accounts, line items in invoices, variants in products</li>
+            <li>The unified API surface makes your code incredibly flexible and composable across different scales</li>
           </ul>
         </aside>
       </section>
